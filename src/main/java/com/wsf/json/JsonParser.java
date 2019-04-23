@@ -4,7 +4,7 @@ import com.wsf.json.annotation.JsonBody;
 import com.wsf.json.exception.JsonParserException;
 
 import java.io.File;
-import java.io.FileFilter;
+import java.lang.reflect.Field;
 import java.util.*;
 
 public class JsonParser {
@@ -16,7 +16,7 @@ public class JsonParser {
     private Stack<Object> stack=new Stack<>();
 
     public JsonParser(){
-
+        parserJsonBody();
     }
 
     public JsonParser(String jsonBody){
@@ -48,13 +48,55 @@ public class JsonParser {
                     stack.push(parserField());
                 }
             }else if(c=='}'){
-
+                return parserEnd();
             }
 
         }
         return null;
     }
 
+    private Class obtainClass(String... fieldNames){
+
+        for (Map.Entry<String,Class> entry:jsonBodies.entrySet()){
+            Class clazz=entry.getValue();
+            if(containerClass(clazz,fieldNames)){
+                return clazz;
+            }
+        }
+        return null;
+
+    }
+    private boolean containerClass(Class clazz, String... fieldNames){
+        for(String fieldName:fieldNames){
+            if(!(containerClass(clazz,fieldName)
+                    ||containerSubClass(clazz.getSuperclass(),fieldName))){
+                return false;
+            }
+        }
+        return  true;
+    }
+    private boolean containerClass(Class clazz,String fieldName){
+
+        if(clazz==Object.class) return false;
+        try {
+            clazz.getDeclaredField(fieldName);
+            return true;
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+            return false;
+        }
+
+    }
+    private boolean containerSubClass(Class clazz,String fieldName){
+        if(clazz==Object.class) return false;
+        try {
+            clazz.getDeclaredField(fieldName);
+            return true;
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+            return containerSubClass(clazz.getSuperclass(),fieldName);
+        }
+    }
     private void parserJsonBody(){
 
         List<File> list=new ArrayList<>();
@@ -109,32 +151,73 @@ public class JsonParser {
 
     }
 
+    private void setFields(Object object,Class clazz,List<Node> nodes){
 
-    private void parserEnd(){
+        for(Node node:nodes) {
+
+            setField(object,clazz,node);
+
+        }
+    }
+    private void setField(Object object,Class clazz,Node node){
+
+
+        if(clazz==Object.class) return;
+        try {
+            Field field=clazz.getDeclaredField(node.getKey());
+            field.setAccessible(true);
+
+            field.set(object,node.getValue());
+
+        } catch (Exception e) {
+            setField(object,clazz.getSuperclass(),node);
+        }
+
+
+    }
+    private Object parserEnd(){
         jsonQueue.poll();
         Node node=null;
         List<Node> nodes=new ArrayList<>();
         Object o=null;
         o=stack.peek();
         List<String> keys=new ArrayList<>();
+        List<Object> values=new ArrayList<>();
         while(o instanceof Node){
             stack.pop();
             node=(Node)o;
             nodes.add(node);
 
         }
-        for(Node n:nodes){
-            keys.add(n.getKey());
-        }
         if(o instanceof Character||o.getClass()==Character.TYPE){
             if((Character)o=='{'){
 
+                //do nothing;
             }else{
                 throw new JsonParserException("miss symbol \'{\'");
             }
         }else{
             throw new JsonParserException("can not parser object:"+o.toString());
         }
+        Class clazz=null;
+        for(Node n:nodes){
+            keys.add(n.getKey());
+            values.add(n.getValue());
+            clazz=obtainClass(keys.toArray(new String[]{}));
+        }
+        if(clazz==null) throw
+                new JsonParserException("can not find class by fields: "+keys.toString());
+
+        try {
+            o=clazz.newInstance();
+            setFields(o,clazz,nodes);
+            return o;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+
     }
 
 
