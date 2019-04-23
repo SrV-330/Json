@@ -1,20 +1,26 @@
 package com.wsf.json;
 
+import com.wsf.json.annotation.JsonBody;
 import com.wsf.json.exception.JsonParserException;
 
+import java.io.File;
+import java.io.FileFilter;
 import java.util.*;
 
-public class JsonParse {
+public class JsonParser {
 
     private static Queue<Character> jsonQueue=new LinkedList<>();
 
     private static HashMap<String,Class> jsonBodies=new HashMap<>();
+
     private Stack<Object> stack=new Stack<>();
 
-    public JsonParse(){}
+    public JsonParser(){
 
-    public JsonParse(String jsonBody){
+    }
 
+    public JsonParser(String jsonBody){
+        this();
         for(int i=0;i<jsonBody.length();i++){
             jsonQueue.offer(jsonBody.charAt(i));
         }
@@ -49,12 +55,60 @@ public class JsonParse {
         return null;
     }
 
-    private void getJsonBody(){
+    private void parserJsonBody(){
+
+        List<File> list=new ArrayList<>();
+        getJavaFiles("src",list);
+        List<String> packages=new ArrayList<>();
+        for(File f:list){
+            String s=f.getAbsolutePath().replace("src/main/java/","")
+                    .replace(".java","");
+            packages.add(s);
+        }
+
+        for(String className:packages){
+
+            try {
+                Class<?> clazz=Class.forName(className);
+                if(clazz.isAnnotationPresent(JsonBody.class)) {
+
+                    jsonBodies.put(className, clazz);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }finally {
+                continue;
+            }
+        }
+
 
     }
-    private void getClasses(){
+
+    private void getJavaFiles(String path,List<File> list){
+        File file=new File(path);
+        if(file.isFile()){
+            if(file.getName().endsWith(".java")) {
+
+                list.add(file);
+                return;
+            }
+        }
+
+        File[] files=file.listFiles();
+        for(File f:files){
+            if(f.isFile()){
+                if(f.getName().endsWith(".java")){
+                    list.add(f);
+                }
+            }else{
+                getJavaFiles(f.getAbsolutePath(),list);
+            }
+        }
+
+
 
     }
+
 
     private void parserEnd(){
         jsonQueue.poll();
@@ -93,7 +147,7 @@ public class JsonParse {
             jsonQueue.poll();
             return new Node(key, parserString());
         }else if(c=='{'){
-            return new Node(key,new JsonParse().parser());
+            return new Node(key,new JsonParser().parser());
         }
         return new Node(key,null);
     }
