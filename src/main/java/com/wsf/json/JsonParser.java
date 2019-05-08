@@ -1,10 +1,13 @@
 package com.wsf.json;
 
+import com.sun.xml.internal.bind.v2.TODO;
 import com.wsf.json.annotation.JsonBody;
 import com.wsf.json.exception.JsonParserException;
+import com.wsf.json.exception.JsonUnsupportClassException;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.sql.Struct;
 import java.util.*;
 
 public class JsonParser {
@@ -49,6 +52,8 @@ public class JsonParser {
                 }
             }else if(c=='}'){
                 return parserEnd();
+            }else if(c=='['){
+                //TODO
             }
 
         }
@@ -166,14 +171,71 @@ public class JsonParser {
         try {
             Field field=clazz.getDeclaredField(node.getKey());
             field.setAccessible(true);
-
-            field.set(object,node.getValue());
+            if(field.getClass().isPrimitive()) {
+                setPrimitiveField(object, field, node.getValue());
+            }else{
+                setPrimitiveWrapperClass(object,field,node.getValue());
+            }
 
         } catch (Exception e) {
             setField(object,clazz.getSuperclass(),node);
         }
 
 
+    }
+    private void setPrimitiveField(Object object,Field field,Object value)
+    throws Exception{
+        try {
+            Class<?> c=field.getClass();
+            String s= String.valueOf( value);
+            if(c==Integer.TYPE){
+                field.set(object,Integer.parseInt(s));
+            }else if(c==Long.TYPE){
+                field.set(object,Long.parseLong(s));
+            }else if(c==Double.TYPE){
+                field.set(object,Double.parseDouble(s));
+            }else if(c==Float.TYPE) {
+                field.set(object,Float.parseFloat(s));
+            }else if(c==Short.TYPE){
+                field.set(object,Short.parseShort(s));
+            }else if(c==Byte.TYPE){
+                field.set(object,Byte.parseByte(s));
+            }else if(c==Boolean.TYPE){
+                field.set(object,Boolean.parseBoolean(s));
+            }else {
+                throw new JsonUnsupportClassException("JsonParser Unsupport Class: "+c.getName());
+            }
+        } catch (IllegalAccessException e) {
+            throw e;
+        }
+    }
+    private void setPrimitiveWrapperClass(Object object,Field field,Object value)
+    throws Exception{
+        try {
+            Class<?> c=field.getClass();
+            String s= String.valueOf( value);
+            if(c==Integer.class){
+                field.set(object,Integer.parseInt(s));
+            }else if(c==Long.class){
+                field.set(object,Long.parseLong(s));
+            }else if(c==Double.class){
+                field.set(object,Double.parseDouble(s));
+            }else if(c==Float.class) {
+                field.set(object,Float.parseFloat(s));
+            }else if(c==Short.class){
+                field.set(object,Short.parseShort(s));
+            }else if(c==Byte.class){
+                field.set(object,Byte.parseByte(s));
+            }else if(c==Boolean.class){
+                field.set(object,Boolean.parseBoolean(s));
+            }else if(c==String.class) {
+                field.set(object,s);
+            }else {
+                field.set(object,value);
+            }
+        } catch (IllegalAccessException e) {
+            throw e;
+        }
     }
     private Object parserEnd(){
         jsonQueue.poll();
