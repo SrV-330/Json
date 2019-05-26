@@ -2,13 +2,20 @@ package com.wsf.json;
 
 import com.sun.xml.internal.bind.v2.TODO;
 import com.wsf.json.annotation.JsonBody;
+import com.wsf.json.annotation.JsonGetter;
+import com.wsf.json.entity.User;
 import com.wsf.json.exception.JsonParserException;
 import com.wsf.json.exception.JsonUnsupportClassException;
+import jdk.nashorn.internal.runtime.Source;
+import jdk.nashorn.internal.runtime.regexp.joni.Regex;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.sql.Struct;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class JsonParser {
 
@@ -54,6 +61,12 @@ public class JsonParser {
                 return parserEnd();
             }else if(c=='['){
                 //TODO
+            }else if(c==']'){
+
+            }else if(c==','){
+                jsonQueue.poll();
+            }else{
+                throw new JsonParserException("can not parser symbol \'"+(char)c+"\'");
             }
 
         }
@@ -64,6 +77,7 @@ public class JsonParser {
 
         for (Map.Entry<String,Class> entry:jsonBodies.entrySet()){
             Class clazz=entry.getValue();
+            System.out.println("Container: "+clazz);
             if(containerClass(clazz,fieldNames)){
                 return clazz;
             }
@@ -107,15 +121,31 @@ public class JsonParser {
         List<File> list=new ArrayList<>();
         getJavaFiles("src",list);
         List<String> packages=new ArrayList<>();
+        String reg="src[\\\\/]main[\\\\/]java[\\\\/]";
+        Pattern pattern=Pattern.compile(reg);
+        Matcher matcher=null;
         for(File f:list){
-            String s=f.getAbsolutePath().replace("src/main/java/","")
-                    .replace(".java","");
+            String path=f.getAbsolutePath();
+            matcher=pattern.matcher(path);
+            int start=-1;
+            int end=-1;
+            if(matcher.find()){
+                start=matcher.start();
+                end=matcher.end();
+            }
+            String s=path.substring(end,path.indexOf(".java"));
+
+
+            s=s.replaceAll("[\\\\/]",".");
+
+            System.out.println("Class: "+s);
             packages.add(s);
         }
 
         for(String className:packages){
 
             try {
+
                 Class<?> clazz=Class.forName(className);
                 if(clazz.isAnnotationPresent(JsonBody.class)) {
 
@@ -171,7 +201,9 @@ public class JsonParser {
         try {
             Field field=clazz.getDeclaredField(node.getKey());
             field.setAccessible(true);
-            if(field.getClass().isPrimitive()) {
+            System.out.println("Field Class: "+field.getType());
+            if(field.getType().isPrimitive()) {
+
                 setPrimitiveField(object, field, node.getValue());
             }else{
                 setPrimitiveWrapperClass(object,field,node.getValue());
@@ -186,7 +218,7 @@ public class JsonParser {
     private void setPrimitiveField(Object object,Field field,Object value)
     throws Exception{
         try {
-            Class<?> c=field.getClass();
+            Class<?> c=field.getType();
             String s= String.valueOf( value);
             if(c==Integer.TYPE){
                 field.set(object,Integer.parseInt(s));
@@ -242,31 +274,42 @@ public class JsonParser {
         Node node=null;
         List<Node> nodes=new ArrayList<>();
         Object o=null;
-        o=stack.peek();
         List<String> keys=new ArrayList<>();
         List<Object> values=new ArrayList<>();
-        while(o instanceof Node){
+        while((o=stack.peek()) instanceof Node){
             stack.pop();
             node=(Node)o;
             nodes.add(node);
-
+            System.out.println(node);
         }
         if(o instanceof Character||o.getClass()==Character.TYPE){
-            if((Character)o=='{'){
+            if((Character) o=='{'){
 
                 //do nothing;
             }else{
                 throw new JsonParserException("miss symbol \'{\'");
             }
+        }else if(o instanceof  Integer||o.getClass()==Integer.TYPE) {
+            if((char)((Integer) o).intValue()=='{'){
+
+                //do nothing;
+            }else{
+                throw new JsonParserException("miss symbol \'{\'");
+            }
+
+
         }else{
-            throw new JsonParserException("can not parser object:"+o.toString());
+            throw new JsonParserException("can not parser object: "+o.getClass().getName());
         }
         Class clazz=null;
         for(Node n:nodes){
             keys.add(n.getKey());
             values.add(n.getValue());
             clazz=obtainClass(keys.toArray(new String[]{}));
+            System.out.println("Class: "+clazz);
         }
+
+
         if(clazz==null) throw
                 new JsonParserException("can not find class by fields: "+keys.toString());
 
@@ -299,14 +342,18 @@ public class JsonParser {
 
     private String parserString(){
         int c=-1;
-        c=jsonQueue.poll();
-        StringBuilder sb=new StringBuilder("");
-        while (c!='"'&&!jsonQueue.isEmpty()){
-            sb.append(c);
+        StringBuilder sb=(new StringBuilder(256)).append("");
+
+        while (!jsonQueue.isEmpty()&&(c=jsonQueue.poll())!='"'){
+            sb.append(Character.toString((char) c));
+
         }
         if(c!='"'){
-            throw new JsonParserException("miss symbol \'\"\' in the end");
+
+            throw new JsonParserException("miss symbol '\"' in the end");
         }
+
+        System.out.println(sb.toString());
         return  sb.toString();
     }
 
@@ -338,8 +385,31 @@ public class JsonParser {
         public void setValue(Object value) {
             this.value = value;
         }
+
+        @Override
+        public String toString() {
+            return "Node{" +
+                    "key='" + key + '\'' +
+                    ", value=" + value +
+                    '}';
+        }
     }
 
+
+
+
+
+
+    public static void main(String[] args) throws Exception {
+        String s="{\"name\":\"wsf\",\"age\":\"18\",\"fri\":{\"name\":\"srv\",\"age\":\"16\"}}";
+        //s="{\"name\":\"srv\",\"age\":\"16\"}";
+        System.out.println("JsonBody: "+s);
+
+        JsonParser jp=new JsonParser(s);
+        User user=(User)jp.parser();
+        System.out.println(user);
+
+    }
 
 
 }
